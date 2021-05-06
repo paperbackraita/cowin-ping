@@ -19,7 +19,8 @@ if len(sys.argv) != 4:
     sys.exit(1)
 
 
-REFRESH_RESULTS = True
+REFRESH_RESULTS = False
+
 CITY = sys.argv[1]
 MIN_AGE = int(sys.argv[2])
 CAPACITY = int(sys.argv[3])
