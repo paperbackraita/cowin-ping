@@ -1,18 +1,20 @@
 # cowin-ping
 Ping CoWin API backend for appointment details
 
-USAGE: 
+## Usage: 
 
 ```
-python cowin-ping.py <city> <minimum_age> <minimum_slots>
-City: Choose from Mumbai, Delhi or Bengaluru
-Age: 18 or 45
+python cowin-ping.py [city] [minimum_age]
+city: Mumbai, Delhi, Bengaluru (for more options, open district_mapping.yaml)
+age: 18, 45
 ```
 
-Use with the watch binary for refreshed results
+The script refreshes every 1 second by default. Disable it by appending `--no-refresh` to the command.
 
-```
-watch -n 1 python cowin_ping.py Delhi 18 1
-```
+## To-Do:
 
-Or use the built in refresher. Enable it by setting `REFRESH_RESULTS` in the script to `True`
+* Add async support for multiple districts
+* Add auth header generation
+* Structure program
+* Get all district IDs
+* Have better way to handle cli commands
