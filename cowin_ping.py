@@ -1,71 +1,71 @@
 import sys
+import yaml
 import time
 import requests
 from os import system, name
 from datetime import datetime
 
 
-# TODO
-# Add async support for multiple districts
-# Add auth header generation
-# Structure program
-# Get all district IDs
-
-
-if len(sys.argv) != 4:
-    print(f"USAGE: {sys.argv[0]} City Minimum_Age Minimum_Slots")
-    print(f"City: Mumbai, Delhi or Bengaluru")
-    print(f"Age: 18 or 45")
+if len(sys.argv) < 3 or "--help" in sys.argv or "-h" in sys.argv:
+    print(f"USAGE: {sys.argv[0]} [city] [minimum_age]")
+    print(f"city: Mumbai, Delhi, Bengaluru (for more options, see district_mapping.yaml)")
+    print(f"age: 18, 45")
+    print("Use --no-refresh to run the script once and quit")
     sys.exit(1)
 
 
-REFRESH_RESULTS = False
-
+REFRESH_RESULTS = False if "--no-refresh" in sys.argv else True
 CITY = sys.argv[1]
 MIN_AGE = int(sys.argv[2])
-CAPACITY = int(sys.argv[3])
-REFRESH_RATE = 2
-DISTRICT_IDS = {
-                "Mumbai":
-                [
-                    ("395", "Mumbai"),
-                ],
-                "Delhi":
-                [
-                    ("140", "New Delhi"),
-                    ("141", "Central Delhi"),
-                    ("149", "South Delhi"),
-                    ("144", "South East Delhi"),
-                    ("150", "South West Delhi"),
-                    ("142", "West Delhi"),
-                    ("145", "East Delhi"),
-                    ("146", "North Delhi"),
-                    ("147", "North East Delhi"),
-                    ("143", "North West Delhi"),
-                    ("148", "Shahdara"),
-                ],
-                "Bengaluru":
-                [
-                    ("265", "Bengaluru Urban"),
-                ]
-            }
+REFRESH_RATE = 1
+CITY_ID_FILE_LOCATION = "./district_mapping.yaml"
 
 
-print(f"CITY: {CITY} \nMINIMUM_AGE: {MIN_AGE} \nMINIMUM_CAPACITY: {CAPACITY}\n\n")
+def print_to_term(appoint_list):
+    def clear():
+        # for windows
+        if name == 'nt':
+            _ = system('cls')
 
+        # for mac and linux(here, os.name is 'posix')
+        else:
+            _ = system('clear')
 
-def clear():
-    # for windows
-    if name == 'nt':
-        _ = system('cls')
+    if appoint_list:
+        # Ring terminal bell if appointments available
+        sys.stdout.write('\a')
+        sys.stdout.flush()
 
-    # for mac and linux(here, os.name is 'posix')
+    if REFRESH_RESULTS:
+        if appoint_list:
+            # _ = input("Press any key to continue...")
+            rate = REFRESH_RATE * 5
+        else:
+            rate = REFRESH_RATE
+
+        print(f"Refreshing after {rate} seconds...")
+        time.sleep(rate)
+
+        clear()
+        return True
     else:
-        _ = system('clear')
+        return False
 
 
-def print_appoint(appoint_dict):
-    pass
+# def print_appoint(appoint_dict):
+#     pass
+
+
+def get_district_ids():
+    try:
+        with open(CITY_ID_FILE_LOCATION) as mapping_file:
+            mapping = yaml.safe_load(mapping_file)
+            return mapping
+    except yaml.YAMLError as ye:
+        print(f"#####Could not understand the district mapping file {CITY_ID_FILE_LOCATION}!#####")
+        print(f"#####Error: {ye}#####")
+        sys.exit(1)
+
 
 def get_district_centers(district_id, date):
     try:
@@ -82,64 +82,66 @@ def get_district_centers(district_id, date):
             "TE": "Trailers",
         }
         response = requests.get(f"https://cdn-api.co-vin.in/api/v2/appointment/sessions/calendarByDistrict?"
-                         f"district_id={district_id}&date={date}", headers=headers).json()
+                                f"district_id={district_id}&date={date}", headers=headers).json()
         return response["centers"]
-    except Exception:
+    except KeyError as ke:
+        print("#####API returned empty response. Refresh a few more times#####")
+        print(f"Error: {ke}")
+    except ValueError as ve:
         print("#####API returned wrong response. Could not decode json.#####")
-        print("#####Possibly values in the middle of refreshing. Wait for the next try.#####")
-        print("#####If this error doesn't go away in 2-3 refreshes, the auth token has expired.#####")
+        print(f"Error: {ve}")
+    except Exception as e:
+        print("#####Something unexpected happened. Lockdown 4.0 initiated. Asta La Vista#####")
+        print("#####Error: ", e)
         return None
 
 
 def main():
-    date = datetime.today().strftime('%d-%m-%Y')
-    session_count = 0
-    center_count = 0
-
     try:
+        city_district_ids = get_district_ids()
+
         while True:
-            print("SLOTS\tDATE\t\tPINCODE\tNAME_OF_CENTRE\n")
+            date = datetime.today().strftime('%d-%m-%Y')
+            print(f"CITY: {CITY} \nMINIMUM_AGE: {MIN_AGE} \n\n")
+
+            print("SLOTS\tDATE\t\tPINCODE\tVACCINE\t\tNAME_OF_CENTRE\n")
 
             appoint_list = []
-            for district, dis_name in DISTRICT_IDS[CITY]:
+            session_count = 0
+            center_set = set()
+
+            for dis_name, dis_id in city_district_ids[CITY].items():
+
                 print(f"\nDistrict: {dis_name}")
 
-                district_centers = get_district_centers(district, date)
+                district_centers = get_district_centers(dis_id, date)
 
                 if not district_centers:
                     continue
 
                 for center in district_centers:
                     for session in center["sessions"]:
-                        """sample session: {'session_id': 'dc046d93-0c47-4f21-8882-9618439383aa', 
-                        'date': '03-05-2021', 'available_capacity': 0, 'min_age_limit': 45, 'vaccine': '', 
-                        'slots': ['09:00AM-11:00AM', '11:00AM-01:00PM', '01:00PM-03:00PM', '03:00PM-05:00PM']}"""
 
-                        session_count += 1
-                        if session["min_age_limit"] == MIN_AGE and session["available_capacity"] >= CAPACITY:
-                            appoint = [session["available_capacity"], session["date"], center["pincode"],
-                                       center["name"]]
-                            for field in appoint:
-                                print(field, end="\t")
-                            print(end="\n")
+                        if session["min_age_limit"] == MIN_AGE:
+                            center_set.add(center["center_id"])
+                            session_count += 1
+                            if session["available_capacity"] > 0:
+                                appointment = [session["available_capacity"], session["date"], center["pincode"],
+                                               session["vaccine"], center["name"]]
+                                for field in appointment:
+                                    print(field, end="\t")
+                                print(end="\n")
 
-                            appoint_list.append(appoint)
+                                appoint_list.append(appointment)
 
-                center_count += len(district_centers)
-            print(f"\n...\nGot {len(appoint_list)} appointment(s) from {center_count} center(s) and {session_count} session(s) overall.")
+            print(f"\n...\nGot {len(appoint_list)} appointment(s) from {session_count} applicable slots(s) and "
+                  f"{len(center_set)} center(s) overall.")
 
-            if REFRESH_RESULTS:
-                if appoint_list:
-                    time.sleep(REFRESH_RATE*4)
-                else:
-                    time.sleep(REFRESH_RATE)
-
-                clear()
-            else:
+            if not print_to_term(appoint_list):
                 sys.exit(0)
 
     except KeyboardInterrupt:
-        print("\n\nQuitting")
+        print("\n\nCaught an interrupt. Quitting")
 
 
 if __name__ == "__main__":
